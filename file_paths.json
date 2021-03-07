@@ -1,0 +1,4 @@
+{
+  "paths": ["csv_files/bank1.csv", "csv_files/bank2.csv", "csv_files/bank3.csv"],
+  "output_path": "csv_files/result.csv"
+}
