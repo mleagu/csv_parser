@@ -52,12 +52,7 @@ def parse():
     if not file_paths:
         raise ValueError('Invalid file paths provided')
 
-    # Write headers for unified csv
-    with open(output, 'w') as f:
-        writer = csv.writer(f)
-        writer.writerow(COLUMN_NAMES)
-
-    for file_path in file_paths:
+    for idx, file_path in enumerate(file_paths):
         logging.debug(f'Parsing csv: {file_path}')
         with open(file_path, 'r') as f:
             reader = csv.reader(f)
@@ -70,9 +65,16 @@ def parse():
             mapping = get_cols_map(column_names)
             data = build_data(reader, mapping)
 
+        # Add headers to first parsed file
+        if not idx:
+            data.insert(0, COLUMN_NAMES)
+            write_mode = 'w'
+        else:
+            write_mode = 'a'
+
         # Write parsed data
         logging.debug(f'Writing parsed data for: {file_path}')
-        with open(output, 'a') as f:
+        with open(output, write_mode) as f:
             writer = csv.writer(f)
             for d in data:
                 writer.writerow(d)
