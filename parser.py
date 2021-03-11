@@ -6,38 +6,46 @@ import logging
 from constants import COLUMN_NAMES, COLUMN_SYNONYMS, COLUMNS_TO_CONCAT
 
 
-def get_cols_map(column_names: list) -> dict:
-    # Create relation between column headers and column index from current file
-    columns_mapping = {}
-
-    for idx, original_column in enumerate(column_names):
-        for synonym in COLUMN_SYNONYMS:
-            if original_column in COLUMN_SYNONYMS[synonym]:
-                columns_mapping.update({synonym: idx})
-                break
-        else:
-            for col_to_concat, values in COLUMNS_TO_CONCAT.items():
-                # Values is a list of tuples
-                for val in values:
-                    if original_column in val:
-                        columns_mapping.update({col_to_concat: [column_names.index(v) for v in val]})
-
-    return columns_mapping
+def unify_value(col_name: str, value: str) -> str:
+    if col_name == 'date':
+        value = dateutil.parser.parse(value).strftime('%b %-d% %Y')
+    return value
 
 
-def build_data(csv_reader: csv.reader, col_mapping: dict) -> list:
+def build_data(csv_reader: csv.reader) -> list:
     data = []
+    column_names = []
     for row in csv_reader:
         data_row = []
+
+        # Get headers
+        if not column_names:
+            column_names = row
+            continue
+
         for column_name in COLUMN_NAMES:
-            row_index = col_mapping[column_name]
-            if type(row_index) is list:
-                data_row.append('.'.join(row[r_idx] for r_idx in row_index))
+            try:
+                row_index = column_names.index(column_name)
+            except ValueError:
+                # Column not found, search in synonyms and in columns to be concatenated
+                synonyms = COLUMN_SYNONYMS[column_name]
+                cols_to_concat = COLUMNS_TO_CONCAT[column_name] if COLUMNS_TO_CONCAT.get(column_name) else []
+                matched_columns = list(set(column_names).intersection(synonyms))\
+                    or list(set(column_names).intersection(cols_to_concat))
+
+                if len(matched_columns) == 1:
+                    row_index = column_names.index(matched_columns[0])
+                    value = row[row_index]
+                elif len(matched_columns) > 1:
+                    row_indexes = [column_names.index(elm) for elm in set(cols_to_concat).intersection(matched_columns)]
+                    value = '.'.join(row[r_idx] for r_idx in row_indexes)
+                else:
+                    raise ValueError(f'Invalid column name: {column_name}')
             else:
-                # Unify date format
-                if column_name == 'date':
-                    row[row_index] = dateutil.parser.parse(row[row_index]).strftime('%b %-d% %Y')
-                data_row.append(row[row_index])
+                value = row[row_index]
+
+            data_row.append(unify_value(column_name, value))
+
         data.append(data_row)
     return data
 
@@ -56,14 +64,7 @@ def parse():
         logging.debug(f'Parsing csv: {file_path}')
         with open(file_path, 'r') as f:
             reader = csv.reader(f)
-            # Get headers
-            column_names = []
-            for row in reader:
-                column_names = row
-                break
-
-            mapping = get_cols_map(column_names)
-            data = build_data(reader, mapping)
+            data = build_data(reader)
 
         # Add headers to first parsed file
         if not idx:
